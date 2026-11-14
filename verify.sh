@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-cd /vol2/1000/share/file/tgflow
+cd "$(dirname "$0")"
 docker build \
   --build-arg PIP_INDEX=https://mirrors.aliyun.com/pypi/simple/ \
   -t tgflow:local .

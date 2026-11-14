@@ -1,12 +1,26 @@
 services:
   tgflow:
-    build: .
+    build:
+      context: .
+      args:
+        # CN 网络：pypi 直连慢/断，BuildKit 不继承 daemon 代理
+        PIP_INDEX: https://mirrors.aliyun.com/pypi/simple/
+    image: tgflow:local
     container_name: tgflow
+    network_mode: host
     volumes:
+      - ./.env:/app/.env:ro
+      - ./tgflow:/app/tgflow
       - ./plugins:/app/tgflow/plugins:ro
-      - ./tests:/app/tests:ro
+      - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
       - TGFLOW_HOME=/app
       - PYTHONPATH=/app
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import tgflow; print(tgflow.__version__)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
