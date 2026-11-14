@@ -22,3 +22,10 @@ jobs:
         run: python tests/test_core.py
       - name: End-to-end smoke test
         run: python tests/test_e2e.py
+      - name: Integration (skipped when tg_sync is not present)
+        run: |
+          if [ -d /vol2/1000/docker/tg_sync ]; then
+            python tests/test_integration.py
+          else
+            echo "tg_sync deployment not present — differential test skipped"
+          fi
