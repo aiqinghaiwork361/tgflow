@@ -160,6 +160,16 @@ pip install -r requirements.txt
 
 依赖：`telethon==1.36.0`（Telegram 客户端）、`flask`（可选 Web 面板）。
 
+## Docker 部署
+
+```bash
+cd /vol2/1000/docker/tgflow
+cp .env.example .env      # 填凭据
+docker compose up -d --build
+```
+
+外挂插件丢进 `plugins/` 目录，容器重启即自动加载（热插拔入口）。
+
 ## License
 
 MIT
