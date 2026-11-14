@@ -22,6 +22,10 @@ jobs:
         run: python tests/test_core.py
       - name: End-to-end smoke test
         run: python tests/test_e2e.py
+      - name: Panel toggle test
+        run: python tests/test_panel_toggle.py
+      - name: Panel API test
+        run: python tests/test_panel_api.py
       - name: Integration (skipped when tg_sync is not present)
         run: |
           if [ -d /vol2/1000/docker/tg_sync ]; then
