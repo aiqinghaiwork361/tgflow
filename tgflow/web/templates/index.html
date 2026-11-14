@@ -19,6 +19,7 @@
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  html { color-scheme: dark; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -42,11 +43,28 @@
     display: flex; align-items: center; gap: 10px;
   }
   .card > h2 .n { color: var(--accent); font-family: var(--mono); }
+  .card > h2 .lc { text-transform: none; }
   .body { padding: 14px 16px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  /* flex wrap so the last row stretches to fill — no dead space */
+  .grid { display: flex; flex-wrap: wrap; gap: 12px; }
+  .stat { flex: 1 1 160px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
   .stat .k { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
   .stat .v { font-size: 21px; font-family: var(--mono); margin-top: 4px; font-weight: 600; }
+  .stat.wide { flex: 2 1 320px; }
+  .stat.wide .v { font-size: 15px; }
+  .stat.fill { flex: 1 1 100%; }
+  .stat.fill .v { font-size: 15px; }
+  /* plugin column should not eat half the table */
+  th:first-child, td:first-child { width: 30%; }
+  th:nth-child(2), td:nth-child(2) { width: 9%; }
+  th:nth-child(4), td:nth-child(4) { width: 12%; }
+  th:last-child, td:last-child { width: 70px; }
+  /* dark scrollbar so it does not glare against the theme */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #14171d; }
+  ::-webkit-scrollbar-thumb { background: #333a47; border-radius: 5px; border: 2px solid #14171d; }
+  ::-webkit-scrollbar-thumb:hover { background: #414a5b; }
+  * { scrollbar-color: #333a47 #14171d; scrollbar-width: thin; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th {
     text-align: left; padding: 9px 16px; color: var(--dim); font-weight: 500;
@@ -57,7 +75,8 @@
   tr:last-child td { border-bottom: none; }
   tr.off td { opacity: .45; }
   .pname { font-family: var(--mono); font-weight: 600; }
-  .psrc { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  .psrc { color: #a4adbe; font-family: var(--mono); font-size: 11px; }
+  .ctr { text-align: center; }
   .hooks { display: flex; gap: 4px; flex-wrap: wrap; }
   .tag {
     font-family: var(--mono); font-size: 10px; padding: 2px 6px;
@@ -68,9 +87,12 @@
   .prio { font-family: var(--mono); color: var(--dim); }
   .switch {
     position: relative; width: 38px; height: 21px; border-radius: 11px;
-    background: #333a47; cursor: pointer; transition: background .16s; flex: none;
+    background: #333a47; cursor: pointer; transition: background .16s;
+    display: inline-block; vertical-align: middle;
   }
   .switch.on { background: var(--ok); }
+  .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .switch::after {
     content: ''; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px;
     border-radius: 50%; background: #fff; transition: transform .16s;
@@ -128,7 +150,7 @@
   </section>
 
   <section class="card">
-    <h2>外挂插件目录 <span class="n" id="extCount"></span></h2>
+    <h2>插件目录（<span class="lc">.py</span> 扩展） <span class="n" id="extCount"></span></h2>
     <div id="extTable"></div>
   </section>
 
@@ -138,7 +160,7 @@
   </section>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -158,23 +180,45 @@ async function loadStatus() {
   try {
     const d = await api('/api/status');
     $('#live').className = 'dot ok'; $('#liveTxt').textContent = '已连接';
-    $('#ver').textContent = 'v' + (d.items.find(i=>i.key==='version')?.value || '?');
-    $('#stats').innerHTML = d.items.map(i =>
-      `<div class="stat"><div class="k">${i.key}</div><div class="v">${i.value}</div></div>`
+    const map = Object.fromEntries(d.items.map(i => [i.key, i.value]));
+    $('#ver').textContent = 'v' + (map.version || '?');
+    const cards = [
+      ['状态', map.status, ''],
+      ['版本', 'v' + (map.version || '?'), ''],
+      ['插件总数', map.plugins, ''],
+      ['已启用', map.active, ''],
+      ['已停用', map.disabled, ''],
+      ['运行时长', fmtUptime(map.uptime_s), ''],
+      ['插件目录', map.external_dir, 'fill'],
+    ];
+    $('#stats').innerHTML = cards.map(([k, v, cls]) =>
+      `<div class="stat ${cls}"><div class="k">${k}</div><div class="v">${v}</div></div>`
     ).join('');
   } catch (e) {
     $('#live').className = 'dot err'; $('#liveTxt').textContent = '连接失败';
   }
 }
 
+function fmtUptime(sec) {
+  sec = Number(sec) || 0;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = n => String(n).padStart(2, '0');
+  if (h) return `${h}时${pad(m)}分`;
+  if (m) return `${m}分${pad(s)}秒`;
+  return `${s}秒`;
+}
+
 async function loadPlugins() {
   const d = await api('/api/plugins');
-  const items = d.items;
+  // sort by priority ascending — that is the real execution order
+  const items = d.items.slice().sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
   $('#plugCount').textContent = items.length;
   if (!items.length) { $('#plugTable').innerHTML = '<div class="empty">没有插件</div>'; return; }
   $('#plugTable').innerHTML = `
     <table><thead><tr>
-      <th>插件</th><th>优先级</th><th>Hooks</th><th>依赖</th><th style="text-align:right">启用</th>
+      <th>插件</th><th>优先级</th><th>钩子</th><th>依赖</th><th class="ctr">启用</th>
     </tr></thead><tbody>
     ${items.map(p => `
       <tr class="${p.enabled ? '' : 'off'}" data-name="${p.name}">
@@ -185,13 +229,15 @@ async function loadPlugins() {
         <td class="prio">${p.priority}</td>
         <td><div class="hooks">${p.hooks.map(h=>`<span class="tag on">${h}</span>`).join('')}</div></td>
         <td class="psrc">${[...p.requires, ...p.optional_requires.map(x=>'?'+x)].join(', ') || '—'}</td>
-        <td style="text-align:right">
-          <div class="switch ${p.enabled ? 'on' : ''}" data-toggle="${p.name}"></div>
+        <td class="ctr">
+          <div class="switch ${p.enabled ? 'on' : ''}" data-toggle="${p.name}"
+               role="switch" aria-checked="${p.enabled}" aria-label="启用 ${p.name}"
+               tabindex="0"></div>
         </td>
       </tr>`).join('')}
     </tbody></table>`;
   $('#plugTable').querySelectorAll('[data-toggle]').forEach(el => {
-    el.onclick = async () => {
+    const toggle = async () => {
       const name = el.dataset.toggle;
       const on = el.classList.contains('on');
       try {
@@ -203,6 +249,10 @@ async function loadPlugins() {
         toast(name + (on ? ' 已停用' : ' 已启用'), 'ok');
         await loadPlugins(); await loadStatus();
       } catch (e) { toast('操作失败: ' + e.message, 'err'); }
+    };
+    el.onclick = toggle;
+    el.onkeydown = (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
     };
   });
 }
@@ -238,7 +288,7 @@ $('#btnReload').onclick = async () => {
     const d = await api('/api/plugins/reload', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
     });
-    toast('已重载 ' + (d.items?.length || 0) + ' 个模块', 'ok');
+    toast('已重载 ' + (d.items?.length || 0) + ' 个插件', 'ok');
     await Promise.all([loadPlugins(), loadExternal(), loadStatus(), loadLogs()]);
   } catch (e) { toast('重载失败: ' + e.message, 'err'); }
   b.disabled = false; b.textContent = '热重载插件';
