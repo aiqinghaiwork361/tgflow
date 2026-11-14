@@ -1,0 +1,12 @@
+services:
+  tgflow:
+    build: .
+    container_name: tgflow
+    volumes:
+      - ./plugins:/app/tgflow/plugins:ro
+      - ./tests:/app/tests:ro
+    environment:
+      - TZ=Asia/Shanghai
+      - TGFLOW_HOME=/app
+      - PYTHONPATH=/app
+    restart: unless-stopped
