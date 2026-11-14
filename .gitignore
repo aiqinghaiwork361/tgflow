@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.session
+*.session.txt
+data/
+sync.log
+.DS_Store
+.idea/
+.vscode/
