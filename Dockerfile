@@ -4,6 +4,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TGFLOW_HOME=/app \
+    TGFLOW_PORT=18319 \
     PYTHONPATH=/app \
     TZ=Asia/Shanghai
 
@@ -20,5 +21,10 @@ RUN pip install --no-cache-dir -i ${PIP_INDEX} -r requirements.txt
 COPY tgflow ./tgflow
 COPY examples ./examples
 COPY tests ./tests
+COPY plugins ./plugins
 
-CMD ["python", "tests/test_core.py"]
+RUN mkdir -p /app/data /app/tgflow/web/templates \
+ && touch /app/tgflow.log
+
+EXPOSE 18319
+CMD ["python", "-m", "tgflow.web.app"]

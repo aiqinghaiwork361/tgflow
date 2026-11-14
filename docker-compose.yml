@@ -11,16 +11,18 @@ services:
     volumes:
       - ./.env:/app/.env:ro
       - ./tgflow:/app/tgflow
-      - ./plugins:/app/tgflow/plugins:ro
+      - ./plugins:/app/plugins
       - ./data:/app/data
+      - ./tgflow.log:/app/tgflow.log
     environment:
       - TZ=Asia/Shanghai
       - TGFLOW_HOME=/app
+      - TGFLOW_PORT=18319
       - PYTHONPATH=/app
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import tgflow; print(tgflow.__version__)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18319/api/status', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s

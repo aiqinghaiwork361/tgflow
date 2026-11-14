@@ -17,14 +17,27 @@ class Registry:
 
     def __init__(self) -> None:
         self._plugins: dict[str, Plugin] = {}
+        self._disabled: set[str] = set()
+        self._sources: dict[str, str] = {}  # plugin name -> display tag
+        self._modules: dict[str, str] = {}  # plugin name -> importable module path
 
     # ---- registration --------------------------------------------------
-    def register(self, plugin: Plugin, name: str | None = None) -> Plugin:
+    def register(
+        self,
+        plugin: Plugin,
+        name: str | None = None,
+        source: str | None = None,
+        module: str | None = None,
+    ) -> Plugin:
         pid = name or plugin.name or type(plugin).__name__
         if pid in self._plugins:
             raise ValueError(f"plugin already registered: {pid}")
         plugin.name = pid
         self._plugins[pid] = plugin
+        if source:
+            self._sources[pid] = source
+        if module:
+            self._modules[pid] = module
         return plugin
 
     def register_class(self, cls: type[Plugin], **options: Any) -> Plugin:
@@ -32,6 +45,40 @@ class Registry:
 
     def unregister(self, name: str) -> None:
         self._plugins.pop(name, None)
+        # keep the disabled flag so a hot reload does not silently re-enable
+        self._sources.pop(name, None)
+        self._modules.pop(name, None)
+
+    # ---- enable / disable ----------------------------------------------
+    def is_enabled(self, name: str) -> bool:
+        return name in self._plugins and name not in self._disabled
+
+    def disable(self, name: str) -> bool:
+        """Disable a plugin. Returns False when it does not exist."""
+        if name not in self._plugins:
+            return False
+        self._disabled.add(name)
+        return True
+
+    def enable(self, name: str) -> bool:
+        if name not in self._plugins:
+            return False
+        self._disabled.discard(name)
+        return True
+
+    def set_enabled(self, name: str, enabled: bool) -> bool:
+        return self.enable(name) if enabled else self.disable(name)
+
+    def disabled(self) -> list[str]:
+        return sorted(self._disabled)
+
+    def source_of(self, name: str) -> str:
+        """Display tag for a plugin (e.g. ``tgflow.plugins.brand``)."""
+        return self._sources.get(name, "")
+
+    def module_of(self, name: str) -> str:
+        """Importable module path for a plugin (empty for inline registrations)."""
+        return self._modules.get(name, "")
 
     # ---- lookup --------------------------------------------------------
     def __contains__(self, name: object) -> bool:
@@ -50,20 +97,31 @@ class Registry:
         return [self._plugins[n] for n in sorted(self._plugins)]
 
     def by_hook(self, hook: str) -> list[Plugin]:
-        """Plugins implementing ``hook``, in priority order (asc)."""
-        out = [p for p in self.all() if _implements(p, hook)]
+        """Enabled plugins implementing ``hook``, in priority order (asc)."""
+        out = [p for p in self.all() if self.is_enabled(p.name) and _implements(p, hook)]
         out.sort(key=lambda p: (p.priority, p.name))
         return out
 
     # ---- dependency resolution ----------------------------------------
-    def resolve(self) -> list[Plugin]:
+    def resolve(self, only_enabled: bool = False) -> list[Plugin]:
         """Topologically sort by ``requires``.
 
         Cycles and missing deps raise — a half-initialised plugin chain is
         worse than a loud failure at startup.
+
+        ``only_enabled=True`` skips disabled plugins, unless another enabled
+        plugin hard-depends on them (a hard dep always wins).
         """
         ordered: list[Plugin] = []
         state: dict[str, int] = {}  # 0=unvisited 1=visiting 2=done
+        needed: set[str] = set()
+
+        if only_enabled:
+            # walk enabled plugins first to collect hard deps
+            for pid in sorted(self._plugins):
+                if self.is_enabled(pid):
+                    needed.add(pid)
+                    needed.update(self._plugins[pid].requires)
 
         def visit(pid: str, trail: tuple[str, ...]) -> None:
             st = state.get(pid, 0)
@@ -84,6 +142,8 @@ class Registry:
             ordered.append(plugin)
 
         for pid in sorted(self._plugins):
+            if only_enabled and pid not in needed:
+                continue
             visit(pid, (pid,))
         return ordered
 
@@ -128,7 +188,7 @@ def load_plugins(
         for plugin in _collect(mod):
             if plugin.name in registry:
                 continue
-            registry.register(plugin)
+            registry.register(plugin, source=mod.__name__, module=mod.__name__)
             loaded.append(plugin)
             log.info("plugin loaded: %s (priority=%s)", plugin.name, plugin.priority)
         return loaded
@@ -141,7 +201,7 @@ def load_plugins(
         for plugin in _collect(mod):
             if plugin.name in registry:
                 continue
-            registry.register(plugin)
+            registry.register(plugin, source=mod.__name__, module=mod.__name__)
             loaded.append(plugin)
             log.info("plugin loaded: %s (priority=%s)", plugin.name, plugin.priority)
     return loaded
