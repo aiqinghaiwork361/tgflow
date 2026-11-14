@@ -5,6 +5,22 @@
 从生产项目 `tg_sync` 抽出的通用内核——原来 1200 行的 `sync.py` 里焊死了清洗规则、
 发送逻辑、去重策略，改一条规则要动主流程。现在规则是插件，框架是框架。
 
+## 定位
+
+**框架独立，业务插件化。** 这个仓库只放「可复用的框架内核」，不放任何具体业务规则。
+
+从生产项目 `tg_sync`（Telegram 资源转发，15 万+ 次转发量）抽出的通用内核。
+原 `sync.py` 1213 行把清洗规则、发送逻辑、去重策略焊死在主流程里，改一条
+规则要动全链路。现在：
+
+```
+tgflow/          ← 框架（这个仓库，只放内核）
+tg_sync/         ← 业务（独立仓库，规则全是 tgflow 插件）
+```
+
+`tests/test_integration.py` 会直接 import 运行中的 tg_sync 生产模块，
+与 tgflow 插件链在同批真实样本上**逐字节比对**——保证拆分后行为完全等价。
+
 ## 架构
 
 ```
@@ -122,10 +138,19 @@ registry = build_registry("my_plugins", only=["word_count"])
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install telethon==1.36.0
-.venv/bin/python tests/test_core.py
+.venv/bin/python tests/test_core.py         # 24 项核心断言
+.venv/bin/python tests/test_e2e.py          # 12 项端到端冒烟
+.venv/bin/python tests/test_integration.py  # 与 tg_sync 生产逻辑差分比对
 ```
 
 不需要 pytest，assert 风格自检脚本，退出码 0 即通过。
+`test_integration.py` 需要本机存在 `/vol2/1000/docker/tg_sync`，否则自动跳过。
+
+容器内验证：
+
+```bash
+./verify.sh
+```
 
 ## 安装
 
